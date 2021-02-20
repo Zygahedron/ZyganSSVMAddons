@@ -463,11 +463,14 @@ function p.onBegin()
 			end
 		end
 	end )
+	message.setHandler( "keyEvent", function(_,_, key, isKeyDown )
+		p.control.keydown[key] = isKeyDown
+		sb.setLogMap("keycode", key)
+	end )
 	message.setHandler( "despawn", function(_,_, nowarpout)
 		p.nowarpout = nowarpout
 		_vsoOnDeath()
 	end )
-	message.setHandler( "forcedsit", p.control.pressE )
 
 	p.stateconfig = config.getParameter("states")
 	p.animStateData = root.assetJson( self.directoryPath .. self.cfgAnimationFile ).animatedParts.stateTypes
@@ -579,12 +582,27 @@ end
 -------------------------------------------------------------------------------
 
 p.control = {}
+p.control.keydown = {}
+p.control.keys = {
+	jump = 5, -- space
+	left = 43, -- a
+	right = 46, -- d
+	down = 61, -- s
+	up = 65, -- w
+	special1 = 48, -- f
+	special2 = 49, -- g
+	special3 = 50, -- h
+	interact = 47, -- e
+	lshift = 115, -- lshift
+	rshift = 114, -- rshift
+}
 
 function p.control.updateDriving()
 	if p.control.standalone then
 		vsoVictimAnimSetStatus( "driver", { "breathprotectionvehicle" } )
 		p.control.driving = true
-		if vehicle.controlHeld( p.control.driver, "Special3" ) then
+		if p.control.keydown[p.control.keys.special3] or vehicle.controlHeld( p.control.driver, "Special3" ) then
+			p.control.keydown[p.control.keys.special3] = false
 			local occupants = {}
 			for i = 1, p.maxOccupants do -- using p.occupants has potential for issues if slots become empty
 				if vsoGetTargetId( "occupant"..i ) then
@@ -602,14 +620,33 @@ function p.control.updateDriving()
 			)
 		end
 	elseif p.occupants >= 1 then
-		if vehicle.controlHeld( p.control.driver, "Special1" ) then
+		if p.control.keydown[p.control.keys.special1] then
+			p.control.keydown[p.control.keys.special1] = false
 			p.control.driving = true
+			world.sendEntityMessage(vehicle.entityLoungingIn( p.control.driver ), "openVSOcontrols", entity.id())
 		end
-		if vehicle.controlHeld( p.control.driver, "Special2" ) then
+		if p.control.keydown[p.control.keys.special2] then
+			p.control.keydown[p.control.keys.special2] = false
 			p.control.driving = false
 		end
 	else
 		p.control.driving = false
+	end
+
+	if p.control.driving and vehicle.entityLoungingIn( p.control.driver ) then
+		local key
+		if vehicle.controlHeld( p.control.driver, "jump" ) then key = "jump" end
+		if vehicle.controlHeld( p.control.driver, "up" ) then key = "up" end
+		if vehicle.controlHeld( p.control.driver, "down" ) then key = "down" end
+		if vehicle.controlHeld( p.control.driver, "left" ) then key = "left" end
+		if vehicle.controlHeld( p.control.driver, "right" ) then key = "right" end
+		if vehicle.controlHeld( p.control.driver, "Special1" ) then key = "special1" end
+		if vehicle.controlHeld( p.control.driver, "Special2" ) then key = "special2" end
+		-- if vehicle.controlHeld( p.control.driver, "Special3" ) then key = "special3" end -- causes settings menu to flicker
+		if key then
+			p.control.keydown[p.control.keys[key]] = true
+			world.sendEntityMessage(vehicle.entityLoungingIn( p.control.driver ), "openVSOcontrols", entity.id())
+		end
 	end
 end
 
@@ -652,92 +689,79 @@ function p.control.doPhysics()
 	end
 end
 
-function p.control.pressE(_,_, seat_index )
-	if seat_index == 0 and p.control.standalone then
-		p.movement.E = true
-	elseif seat_index == 1 and not p.control.standalone then
-		p.movement.E = true
-	end
-end
-
 function p.control.interact()
-	if p.movement.E then -- intercepting vsoForcePlayerSit to get this
-		if not p.movement.wasE then
-			local aim = vehicle.aimPosition( p.control.driver )
-			local mpos = mcontroller.position()
-			local dpos = world.distance( mpos, aim )
-			local interactables
-			local queryParameters = {
-				withoutEntityId = entity.id(), -- don't interact with self
-				boundMode = "collisionarea", -- hopefully this makes you not have to point at the exact center of the object... doubtful though
-				order = "nearest"
-			}
-			if world.magnitude( dpos ) < 9 then -- interact range -- and not world.lineTileCollision( mpos, aim )
-				interactables = world.entityQuery( aim, 0.5, queryParameters )
-			else
-				interactables = world.entityQuery( mcontroller.position(), 3, queryParameters )
-			end
-			local obj = interactables[1]
-			local driver = vehicle.entityLoungingIn( p.control.driver )
-			if obj == driver then
-				obj = interactables[2]
-			end
-			if obj ~= nil and driver ~= nil then
-				local objpos = world.entityPosition( obj )
-				vsoDebugRect( objpos[1]-0.5, objpos[2]-0.5, objpos[1]+0.5, objpos[2]+0.5, "red" )
-
-				local name = world.getObjectParameter( obj, "objectName" )
-				-- if name ~= nil then -- object
-					local interactaction = world.getObjectParameter( obj, "interactAction" )
-					local interactdata = world.getObjectParameter( obj, "interactData" )
-					local localinteracted = false
-					if interactaction == nil then -- some things return that from script? let's try to get that
-						local s, e = pcall(function() -- this only works on local entities, pcall should stop it from crashing the game
-							local action = world.callScriptedEntity( obj, "onInteraction", {
-								source = world.distance( mpos, objpos ),
-								sourceId = driver
-							} )
-							if action ~= nil then
-								interactaction = action[1]
-								interactdata = action[2]
-							end
-							localinteracted = true
-						end)
-						if not s then
-							sb.logError(e)
-						end
-					end
-					if interactaction ~= nil then
-						if type( interactdata ) == "string" then
-							interactdata = root.assetJson( interactdata )
-						end
-						world.sendEntityMessage( driver, "vsoForceInteract", interactaction, interactdata, obj )
-					elseif world.getObjectParameter( obj, "uiConfig" ) ~= nil then
-						uiconfig = world.getObjectParameter( obj, "uiConfig" )
-						if world.getObjectParameter( obj, "slotCount" ) ~= nil then
-							uiconfig = sb.replaceTags( uiconfig, { ["slots"] = world.getObjectParameter( obj, "slotCount" ) } )
-						end
-						local configdata = root.assetJson( uiconfig )
-						world.sendEntityMessage( driver, "vsoForceInteract", "OpenContainer", configdata, obj )
-					elseif world.getObjectParameter( obj, "upgradeStates" ) then -- upgradeablecraftingobjects
-					elseif not localinteracted then -- call onInteraction for non-local entities, sadly we can't get the return value or this would be earlier
-						world.objectQuery( objpos, 1, {
-							name = name,
-							callScript = "onInteraction",
-							callScriptArgs = { {
-								source = world.distance( mpos, objpos ),
-								sourceId = driver
-							} },
-						} )
-					end
-				-- end
-			end
+	if p.control.keydown[p.control.keys.interact] then -- intercepting vsoForcePlayerSit to get this
+		p.control.keydown[p.control.keys.interact] = false
+		local aim = vehicle.aimPosition( p.control.driver )
+		local mpos = mcontroller.position()
+		local dpos = world.distance( mpos, aim )
+		local interactables
+		local queryParameters = {
+			withoutEntityId = entity.id(), -- don't interact with self
+			boundMode = "collisionarea", -- hopefully this makes you not have to point at the exact center of the object... doubtful though
+			order = "nearest"
+		}
+		if world.magnitude( dpos ) < 9 then -- interact range -- and not world.lineTileCollision( mpos, aim )
+			interactables = world.entityQuery( aim, 0.5, queryParameters )
+		else
+			interactables = world.entityQuery( mcontroller.position(), 3, queryParameters )
 		end
-		p.movement.wasE = true
-	else
-		p.movement.wasE = false
+		local obj = interactables[1]
+		local driver = vehicle.entityLoungingIn( p.control.driver )
+		if obj == driver then
+			obj = interactables[2]
+		end
+		if obj ~= nil and driver ~= nil then
+			local objpos = world.entityPosition( obj )
+			vsoDebugRect( objpos[1]-0.5, objpos[2]-0.5, objpos[1]+0.5, objpos[2]+0.5, "red" )
+
+			local name = world.getObjectParameter( obj, "objectName" )
+			-- if name ~= nil then -- object
+				local interactaction = world.getObjectParameter( obj, "interactAction" )
+				local interactdata = world.getObjectParameter( obj, "interactData" )
+				local localinteracted = false
+				if interactaction == nil then -- some things return that from script? let's try to get that
+					local s, e = pcall(function() -- this only works on local entities, pcall should stop it from crashing the game
+						local action = world.callScriptedEntity( obj, "onInteraction", {
+							source = world.distance( mpos, objpos ),
+							sourceId = driver
+						} )
+						if action ~= nil then
+							interactaction = action[1]
+							interactdata = action[2]
+						end
+						localinteracted = true
+					end)
+					if not s then
+						sb.logError(e)
+					end
+				end
+				if interactaction ~= nil then
+					if type( interactdata ) == "string" then
+						interactdata = root.assetJson( interactdata )
+					end
+					world.sendEntityMessage( driver, "vsoForceInteract", interactaction, interactdata, obj )
+				elseif world.getObjectParameter( obj, "uiConfig" ) ~= nil then
+					uiconfig = world.getObjectParameter( obj, "uiConfig" )
+					if world.getObjectParameter( obj, "slotCount" ) ~= nil then
+						uiconfig = sb.replaceTags( uiconfig, { ["slots"] = world.getObjectParameter( obj, "slotCount" ) } )
+					end
+					local configdata = root.assetJson( uiconfig )
+					world.sendEntityMessage( driver, "vsoForceInteract", "OpenContainer", configdata, obj )
+				elseif world.getObjectParameter( obj, "upgradeStates" ) then -- upgradeablecraftingobjects
+				elseif not localinteracted then -- call onInteraction for non-local entities, sadly we can't get the return value or this would be earlier
+					world.objectQuery( objpos, 1, {
+						name = name,
+						callScript = "onInteraction",
+						callScriptArgs = { {
+							source = world.distance( mpos, objpos ),
+							sourceId = driver
+						} },
+					} )
+				end
+			-- end
+		end
 	end
-	p.movement.E = false
 end
 
 function p.control.drive()
@@ -746,10 +770,10 @@ function p.control.drive()
 	if control.animations == nil then control.animations = {} end -- allow indexing
 
 	local dx = 0
-	if vehicle.controlHeld( p.control.driver, "left" ) then
+	if p.control.keydown[p.control.keys.left] then
 		dx = dx - 1
 	end
-	if vehicle.controlHeld( p.control.driver, "right" ) then
+	if p.control.keydown[p.control.keys.right] then
 		dx = dx + 1
 	end
 	mcontroller.approachXVelocity( dx * control.swimSpeed, 50 )
@@ -810,7 +834,7 @@ function p.control.groundMovement( dx )
 	local control = state.control
 
 	local running = false
-	if not vehicle.controlHeld( p.control.driver, "down" ) and p.visualOccupants < control.fullThreshold then
+	if not (p.control.keydown[p.control.keys.lshift] or p.control.keydown[p.control.keys.rshift]) and p.visualOccupants < control.fullThreshold then
 		running = true
 	end
 	if dx ~= 0 then
@@ -836,8 +860,8 @@ function p.control.groundMovement( dx )
 	end
 
 	mcontroller.setYVelocity( -0.15 ) -- to detect leaving ground
-	if vehicle.controlHeld( p.control.driver, "jump" ) then
-		if not vehicle.controlHeld( p.control.driver, "down" ) then
+	if p.control.keydown[p.control.keys.jump] then
+		if not p.control.keydown[p.control.keys.down] then
 			if not p.movement.jumped then
 				p.doAnims( control.animations.jump )
 				p.movement.animating = true
@@ -869,16 +893,16 @@ function p.control.waterMovement( dx )
 	end
 	mcontroller.approachXVelocity( dx * control.swimSpeed, 50 )
 
-	if vehicle.controlHeld( p.control.driver, "jump" ) then
+	if p.control.keydown[p.control.keys.jump] then
 		mcontroller.approachYVelocity( 10, 50 )
 	else
 		mcontroller.approachYVelocity( -10, 50 )
 	end
 
-	if vehicle.controlHeld( p.control.driver, "jump" )
-	-- or vehicle.controlHeld( p.control.driver, "down" )
-	or vehicle.controlHeld( p.control.driver, "left" )
-	or vehicle.controlHeld( p.control.driver, "right" ) then
+	if p.control.keydown[p.control.keys.jump]
+	-- or p.control.keydown[p.control.keys.down]
+	or p.control.keydown[p.control.keys.left]
+	or p.control.keydown[p.control.keys.right] then
 		p.doAnims( control.animations.swim )
 
 		p.movement.animating = true
@@ -898,7 +922,7 @@ function p.control.airMovement( dx )
 	local control = p.stateconfig[p.state].control
 
 	local running = false
-	if not vehicle.controlHeld( p.control.driver, "down" ) and p.visualOccupants < control.fullThreshold then
+	if not (p.control.keydown[p.control.keys.lshift] or p.control.keydown[p.control.keys.rshift]) and p.visualOccupants < control.fullThreshold then
 		running = true
 	end
 	if dx ~= 0 then
@@ -911,17 +935,17 @@ function p.control.airMovement( dx )
 		mcontroller.approachXVelocity( 0, 30 )
 	end
 
-	if vehicle.controlHeld( p.control.driver, "down" ) then
+	if p.control.keydown[p.control.keys.down] then
 		mcontroller.applyParameters{ ignorePlatformCollision = true }
 	else
 		mcontroller.applyParameters{ ignorePlatformCollision = false }
 	end
-	if mcontroller.yVelocity() > 0 and vehicle.controlHeld( p.control.driver, "jump" ) then
+	if mcontroller.yVelocity() > 0 and p.control.keydown[p.control.keys.jump] then
 		mcontroller.approachYVelocity( -100, world.gravity(mcontroller.position()) )
 	else
 		mcontroller.approachYVelocity( -200, 2 * world.gravity(mcontroller.position()) )
 	end
-	if vehicle.controlHeld( p.control.driver, "jump" ) then
+	if p.control.keydown[p.control.keys.jump] then
 		if not p.movement.jumped and p.movement.jumps < control.jumpCount then
 			p.doAnims( control.animations.jump )
 			p.movement.animating = true

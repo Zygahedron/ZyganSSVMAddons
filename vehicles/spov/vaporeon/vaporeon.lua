@@ -149,7 +149,7 @@ function state_stand()
 	p.handleBelly()
 
 	if p.control.driving then
-		if vehicle.controlHeld( p.control.driver, "down" ) then
+		if p.control.keydown[p.control.keys.down] then
 			p.movement.downframes = p.movement.downframes + 1
 		else
 			if p.movement.downframes > 0 and p.movement.downframes < 10 and p.control.notMoving() and p.control.probablyOnGround() then
@@ -160,7 +160,7 @@ function state_stand()
 		if p.movement.wasspecial1 ~= true and p.movement.wasspecial1 ~= false and p.movement.wasspecial1 > 0 then
 			-- a bit of a hack, prevents the special1 press from activating vappy from also doing this by adding a 10 frame delay before checking if you're pressing it
 			p.movement.wasspecial1 = p.movement.wasspecial1 - 1
-		elseif p.control.standalone and vehicle.controlHeld( p.control.driver, "Special1" ) then
+		elseif p.control.standalone and p.control.keydown[p.control.keys.special1] then
 			if not p.movement.wasspecial1 then
 				-- vsoAnim( "bodyState", "smolify" )
 				vsoEffectWarpOut()
@@ -174,7 +174,7 @@ function state_stand()
 		else
 			p.movement.wasspecial1 = false
 		end
-		if p.control.standalone and vehicle.controlHeld( p.control.driver, "Special2" )  then
+		if p.control.standalone and p.control.keydown[p.control.keys.special2]  then
 			if p.occupants > 0 then
 				p.doTransition( "escape", {index=p.occupants} ) -- last eaten
 			end
@@ -275,7 +275,7 @@ function state_hug()
 
 	p.standardState()
 
-	if p.control.driving and vehicle.controlHeld( p.control.driver, "jump" ) then
+	if p.control.driving and p.control.keydown[p.control.keys.jump] then
 		p.doTransition( "absorb" )
 	end
 
@@ -303,7 +303,7 @@ function state_pinned()
 		p.control.primaryAction() -- lick
 	end
 
-	if p.control.driving and vehicle.controlHeld( p.control.driver, "jump" ) then
+	if p.control.driving and p.control.keydown[p.control.keys.jump] then
 		p.doTransition( "absorb" )
 	end
 
@@ -333,7 +333,7 @@ function state_smol()
 	-- 	p.handleStruggles()
 	-- end
 
-	if p.control.standalone and vehicle.controlHeld( p.control.driver, "Special1" ) then
+	if p.control.standalone and p.control.keydown[p.control.keys.special1] then
 		if not p.movement.wasspecial1 then
 			-- vsoAnim( "bodyState", "unsmolify" )
 			vsoEffectWarpIn()
@@ -406,7 +406,7 @@ function state_chonk_ball()
 	if p.visualOccupants > 0 then
 		speed = 10
 	end
-	if vehicle.controlHeld( p.control.driver, "down" ) then
+	if p.control.keydown[p.control.keys.down] then
 		p.movement.downframes = p.movement.downframes + 1
 	else
 		-- if p.movement.downframes > 0 and p.movement.downframes < 10 and notMoving() and probablyOnGround() then
@@ -415,7 +415,7 @@ function state_chonk_ball()
 		-- end
 		p.movement.downframes = 0
 	end
-	if vehicle.controlHeld( p.control.driver, "Special1" ) then
+	if p.control.keydown[p.control.keys.special1] then
 		if not p.movement.wasspecial1 then
 			-- vsoAnim( "bodyState", "unsmolify" )
 			vsoEffectWarpIn()
@@ -425,21 +425,21 @@ function state_chonk_ball()
 	else
 		p.movement.wasspecial1 = false
 	end
-	if vehicle.controlHeld( p.control.driver, "Special2" ) then
+	if p.control.keydown[p.control.keys.special2] then
 		if p.occupants > 0 then
 			-- letout( p.occupants ) -- last eaten
 		end
 	end
 
 	-- p.movement controls, use vanilla methods because they need to be held
-	if vehicle.controlHeld( p.control.driver, "left" ) then
+	if p.control.keydown[p.control.keys.left] then
 		dx = dx - 1
 		if vsoAnimEnd( "bodyState" ) then
 			CurBallFrame = CurBallFrame - 1
 			roll_chonk_ball()
 		end
 	end
-	if vehicle.controlHeld( p.control.driver, "right" ) then
+	if p.control.keydown[p.control.keys.right] then
 		dx = dx + 1
 		if vsoAnimEnd( "bodyState" ) then
 			CurBallFrame = CurBallFrame + 1
@@ -448,11 +448,11 @@ function state_chonk_ball()
 	end
 
 	if not p.control.underWater() then
-		if vehicle.controlHeld( p.control.driver, "down" ) then
+		if p.control.keydown[p.control.keys.lshift] or p.control.keydown[p.control.keys.rshift] then
 			speed = 10
-			if not probablyOnGround() then
-				mcontroller.applyParameters{ ignorePlatformCollision = true }
-			end
+		end
+		if p.control.keydown[p.control.keys.down] and not probablyOnGround() then
+			mcontroller.applyParameters{ ignorePlatformCollision = true }
 		else
 			mcontroller.applyParameters{ ignorePlatformCollision = false }
 		end
@@ -461,7 +461,7 @@ function state_chonk_ball()
 		if p.visualOccupants == 2 then
 			speed = 10
 		end
-		if vehicle.controlHeld( p.control.driver, "jump" ) then
+		if p.control.keydown[p.control.keys.jump] then
 			mcontroller.approachYVelocity( 10, 50 )
 		else
 			mcontroller.approachYVelocity( -10, 50 )
@@ -470,7 +470,7 @@ function state_chonk_ball()
 	if not p.control.underWater() then
 		p.movement.waswater = false
 		mcontroller.setXVelocity( dx * speed )
-		if mcontroller.yVelocity() > 0 and vehicle.controlHeld( p.control.driver, "jump" )  then
+		if mcontroller.yVelocity() > 0 and p.control.keydown[p.control.keys.jump]  then
 			mcontroller.approachYVelocity( -100, world.gravity(mcontroller.position()) )
 		else
 			mcontroller.approachYVelocity( -200, 2 * world.gravity(mcontroller.position()) )

@@ -140,8 +140,8 @@ function state_stand()
 	and world.rectCollision( {position[1]-3.5, position[2]+3, position[1]+3.5, position[2] }, { "Null", "block", "slippery"} )
 	and not world.rectCollision( {position[1]-3.5, position[2]-6, position[1]+3.5, position[2]-1 }, { "Null", "block", "slippery"} )
 	then
-		if (vehicle.controlHeld( p.control.driver, "left") or vehicle.controlHeld( p.control.driver, "right") )
-		and vehicle.controlHeld( p.control.driver, "down") then
+		if (p.control.keydown[p.control.keys.left] or p.control.keydown[p.control.keys.right] )
+		and p.control.keydown[p.control.keys.down] then
 			p.doTransition( "crouch" )
 		elseif p.autocrouch or not p.control.driving then
 			p.doTransition( "crouch" )
@@ -149,7 +149,7 @@ function state_stand()
 	end
 
 	if p.control.driving then
-		if vehicle.controlHeld( p.control.driver, "down" ) then
+		if p.control.keydown[p.control.keys.down] then
 			p.movement.downframes = p.movement.downframes + 1
 		else
 			if p.movement.downframes > 0 and p.movement.downframes < 10 and p.control.notMoving() and p.control.probablyOnGround() then
@@ -163,7 +163,7 @@ function state_stand()
 		else
 			p.movement.wasspecial1 = false
 		end
-		if p.control.standalone and vehicle.controlHeld( p.control.driver, "Special2" )  then
+		if p.control.standalone and p.control.keydown[p.control.keys.special2]  then
 			if p.occupants > 0 then
 				p.doTransition( "escape", {index=p.occupants} ) -- last eaten
 			end
@@ -284,7 +284,7 @@ function state_crouch()
 
 	local position = mcontroller.position()
 	if not world.rectCollision( {position[1]-3.5, position[2]+3, position[1]+3.5, position[2]+0 }, { "Null", "block", "slippery"} )
-	and not vehicle.controlHeld( p.control.driver, "down")
+	and not p.control.keydown[p.control.keys.down]
 	then
 		if not p.control.probablyOnGround() then
 			p.setState( "stand" )

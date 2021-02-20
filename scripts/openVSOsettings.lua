@@ -8,6 +8,10 @@ function init()
 		pane.maxOccupants = maxOccupants
 		player.interact( "ScriptPane", pane, vso )
 	end)
+	message.setHandler( "openVSOcontrols", function(_,_, vso )
+		local pane = root.assetJson("/interface/scripted/vsocontrols/vsocontrols.config")
+		player.interact( "ScriptPane", pane, vso )
+	end)
 	message.setHandler( "loadVSOsettings", function(_,_, vsoMenuName )
 		return player.getProperty( vsoMenuName.."Settings" ) or {}
 	end)
